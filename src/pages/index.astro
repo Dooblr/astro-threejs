@@ -1,5 +1,6 @@
 ---
 import Cube from "../components/Cube.astro";
+import Particles from "../components/Particles.astro";
 import "../styles/global.css";
 ---
 
@@ -7,12 +8,25 @@ import "../styles/global.css";
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Astro + Three.js Cube</title>
+    <title>Astro + Three.js Interactive Demo</title>
   </head>
   <body>
-    <div class="info">Rotating Three.js Cube</div>
-    <main class="container">
-      <Cube />
-    </main>
+    <div class="page-container">
+      <!-- Cube Section -->
+      <section class="demo-section">
+        <div class="section-info">Rotating Three.js Cube</div>
+        <div class="demo-container">
+          <Cube />
+        </div>
+      </section>
+
+      <!-- Particles Section -->
+      <section class="demo-section">
+        <div class="section-info">Interactive Particle System - Move your mouse!</div>
+        <div class="demo-container">
+          <Particles />
+        </div>
+      </section>
+    </div>
   </body>
 </html>

@@ -2,7 +2,7 @@
 // Cube.astro
 ---
 
-<div id="three-container" style="width: 100%; height: 400px; background: #000;"></div>
+<div id="three-container"></div>
 
 <script>
   import * as THREE from 'three';
@@ -31,30 +31,83 @@
     // Renderer setup
     const renderer = new THREE.WebGLRenderer({ 
       antialias: true,
-      alpha: true 
+      alpha: false 
     });
     renderer.setSize(container.clientWidth, container.clientHeight);
+    renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setClearColor(0x000000, 1);
+    
+    // Ensure canvas fills container
+    renderer.domElement.style.width = '100%';
+    renderer.domElement.style.height = '100%';
+    renderer.domElement.style.display = 'block';
     
     // Clear container and add canvas
     container.innerHTML = '';
     container.appendChild(renderer.domElement);
 
-    // Cube geometry and material
-    const geometry = new THREE.BoxGeometry(1, 1, 1);
-    const material = new THREE.MeshBasicMaterial({ 
-      color: 0x00ff00, 
-      wireframe: true 
-    });
-    const cube = new THREE.Mesh(geometry, material);
-    scene.add(cube);
+    // Create multiple cubes for more visual interest
+    const cubes = [];
+    const cubeCount = 1;
+    
+    for (let i = 0; i < cubeCount; i++) {
+      const geometry = new THREE.BoxGeometry(
+        0.5 + Math.random() * 0.5,
+        0.5 + Math.random() * 0.5,
+        0.5 + Math.random() * 0.5
+      );
+      
+      const material = new THREE.MeshBasicMaterial({ 
+        color: new THREE.Color().setHSL(i / cubeCount, 0.8, 0.6),
+        wireframe: true 
+      });
+      
+      const cube = new THREE.Mesh(geometry, material);
+      
+      // Random positions
+    //   cube.position.set(
+    //     (Math.random() - 0.5) * 4,
+    //     (Math.random() - 0.5) * 4,
+    //     (Math.random() - 0.5) * 2
+    //   );
+      
+      // Random rotation speeds
+      cube.userData = {
+        rotationSpeed: {
+          x: (Math.random() - 0.5) * 0.02,
+          y: (Math.random() - 0.5) * 0.02,
+          z: (Math.random() - 0.5) * 0.02
+        }
+      };
+      
+      scene.add(cube);
+      cubes.push(cube);
+    }
+
+    // Add some ambient lighting effect
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
+    scene.add(ambientLight);
 
     // Animation loop
     function animate() {
       requestAnimationFrame(animate);
       
-      cube.rotation.x += 0.01;
-      cube.rotation.y += 0.01;
+      // Animate each cube
+      cubes.forEach((cube, index) => {
+        cube.rotation.x += cube.userData.rotationSpeed.x;
+        cube.rotation.y += cube.userData.rotationSpeed.y;
+        cube.rotation.z += cube.userData.rotationSpeed.z;
+        
+        // Add floating motion
+        const time = Date.now() * 0.001;
+        cube.position.y += Math.sin(time + index) * 0.005;
+      });
+      
+      // Rotate camera around the scene
+      const time = Date.now() * 0.0005;
+      camera.position.x = Math.sin(time) * 5;
+      camera.position.z = Math.cos(time) * 5;
+      camera.lookAt(scene.position);
       
       renderer.render(scene, camera);
     }
@@ -69,9 +122,30 @@
       camera.updateProjectionMatrix();
       
       renderer.setSize(width, height);
+      renderer.setPixelRatio(window.devicePixelRatio);
+      
+      // Ensure canvas maintains full size
+      renderer.domElement.style.width = '100%';
+      renderer.domElement.style.height = '100%';
     }
     
     window.addEventListener('resize', handleResize);
+    
+    // Initial resize to ensure proper sizing
+    handleResize();
+    
+    // Cleanup function
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      if (container.contains(renderer.domElement)) {
+        container.removeChild(renderer.domElement);
+      }
+      renderer.dispose();
+      cubes.forEach(cube => {
+        cube.geometry.dispose();
+        cube.material.dispose();
+      });
+    };
   }
   
   // Run when component mounts
