@@ -1,4 +1,3 @@
-// astro.config.mjs
 import { defineConfig } from 'astro/config';
 
 export default defineConfig({
@@ -7,47 +6,32 @@ export default defineConfig({
     // Enable minification
     minify: true,
     // Enable asset inlining for critical resources
-    inlineStylesheets: 'auto',
-    // Split chunks for better caching
-    rollupOptions: {
-      output: {
-        manualChunks: {
-          'three-vendor': ['three'],
-        }
-      }
-    }
+    inlineStylesheets: 'auto'
   },
   vite: {
     build: {
       // Enable CSS minification
       cssMinify: true,
-      // Enable JS minification with terser for better compression
+      // Enable JS minification
       minify: 'terser',
       terserOptions: {
         compress: {
-          drop_console: true,
+          drop_console: false, // Keep console logs for debugging
           drop_debugger: true,
         },
       },
-      // Optimize chunk size
+      // Optimize chunk handling
       rollupOptions: {
         output: {
-          manualChunks(id) {
-            // Vendor chunk for Three.js
-            if (id.includes('node_modules/three')) {
-              return 'three-vendor';
-            }
-            // Separate chunk for large dependencies
-            if (id.includes('node_modules') && id.length > 1000) {
-              return 'vendor-large';
-            }
+          manualChunks: {
+            'three-vendor': ['three']
           }
         }
       }
     },
-    // Enable compression during dev
-    server: {
-      compression: true
+    // Optimizations for development
+    optimizeDeps: {
+      include: ['three']
     }
-  },
+  }
 });
