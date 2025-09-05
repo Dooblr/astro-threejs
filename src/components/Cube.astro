@@ -1,5 +1,5 @@
 ---
-// Cube.astro - Fixed Three.js component with proper error handling
+// Cube.astro - Updated with orbit controls for touch/mouse orbiting
 ---
 
 <div id="three-container" class="loading">Loading Three.js Cube...</div>
@@ -97,40 +97,253 @@
       pointLight.position.set(-5, -5, 5);
       scene.add(pointLight);
 
-      // Animation variables
-      let mouseX = 0;
-      let mouseY = 0;
-      let targetRotationX = 0;
-      let targetRotationY = 0;
-      
-      // Mouse interaction
-      function onMouseMove(event) {
-        const rect = container.getBoundingClientRect();
-        mouseX = ((event.clientX - rect.left) / rect.width) * 2 - 1;
-        mouseY = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      // Orbit controls implementation
+      class OrbitControls {
+        constructor(camera, domElement) {
+          this.camera = camera;
+          this.domElement = domElement;
+          this.target = new THREE.Vector3();
+          
+          // Rotation state
+          this.spherical = new THREE.Spherical();
+          this.sphericalDelta = new THREE.Spherical();
+          
+          // Pan state
+          this.panOffset = new THREE.Vector3();
+          
+          // Zoom state
+          this.scale = 1;
+          this.zoomSpeed = 1.0;
+          
+          // Rotation settings
+          this.rotateSpeed = 1.0;
+          this.enableRotate = true;
+          this.enablePan = false;
+          this.enableZoom = true;
+          this.enableDamping = true;
+          this.dampingFactor = 0.05;
+          
+          // Internal state
+          this.isPointerDown = false;
+          this.pointerPositions = {};
+          
+          this.setupEventListeners();
+          this.update();
+        }
         
-        targetRotationX = mouseY * 0.5;
-        targetRotationY = mouseX * 0.5;
+        setupEventListeners() {
+          // Mouse events
+          this.domElement.addEventListener('mousedown', this.onMouseDown.bind(this));
+          this.domElement.addEventListener('wheel', this.onMouseWheel.bind(this));
+          this.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+          
+          // Touch events
+          this.domElement.addEventListener('touchstart', this.onTouchStart.bind(this));
+          this.domElement.addEventListener('touchmove', this.onTouchMove.bind(this));
+          this.domElement.addEventListener('touchend', this.onTouchEnd.bind(this));
+          
+          // Global events
+          document.addEventListener('mousemove', this.onMouseMove.bind(this));
+          document.addEventListener('mouseup', this.onMouseUp.bind(this));
+        }
+        
+        getPointerPosition(event) {
+          const rect = this.domElement.getBoundingClientRect();
+          return {
+            x: ((event.clientX - rect.left) / rect.width) * 2 - 1,
+            y: -((event.clientY - rect.top) / rect.height) * 2 + 1
+          };
+        }
+        
+        onMouseDown(event) {
+          event.preventDefault();
+          this.isPointerDown = true;
+          this.rotateStart = this.getPointerPosition(event);
+        }
+        
+        onMouseMove(event) {
+          if (!this.isPointerDown || !this.enableRotate) return;
+          
+          event.preventDefault();
+          
+          const position = this.getPointerPosition(event);
+          const deltaX = position.x - this.rotateStart.x;
+          const deltaY = position.y - this.rotateStart.y;
+          
+          this.rotateLeft(2 * Math.PI * deltaX * this.rotateSpeed);
+          this.rotateUp(2 * Math.PI * deltaY * this.rotateSpeed);
+          
+          this.rotateStart = position;
+        }
+        
+        onMouseUp() {
+          this.isPointerDown = false;
+        }
+        
+        onMouseWheel(event) {
+          if (!this.enableZoom) return;
+          
+          event.preventDefault();
+          event.stopPropagation();
+          
+          if (event.deltaY < 0) {
+            this.dollyIn();
+          } else if (event.deltaY > 0) {
+            this.dollyOut();
+          }
+        }
+        
+        onTouchStart(event) {
+          event.preventDefault();
+          
+          const touches = event.touches;
+          
+          if (touches.length === 1) {
+            this.isPointerDown = true;
+            this.rotateStart = this.getPointerPosition(touches[0]);
+          } else if (touches.length === 2) {
+            const dx = touches[0].clientX - touches[1].clientX;
+            const dy = touches[0].clientY - touches[1].clientY;
+            this.distanceStart = Math.sqrt(dx * dx + dy * dy);
+          }
+        }
+        
+        onTouchMove(event) {
+          event.preventDefault();
+          
+          const touches = event.touches;
+          
+          if (touches.length === 1 && this.isPointerDown) {
+            const position = this.getPointerPosition(touches[0]);
+            const deltaX = position.x - this.rotateStart.x;
+            const deltaY = position.y - this.rotateStart.y;
+            
+            this.rotateLeft(2 * Math.PI * deltaX * this.rotateSpeed);
+            this.rotateUp(2 * Math.PI * deltaY * this.rotateSpeed);
+            
+            this.rotateStart = position;
+          } else if (touches.length === 2) {
+            const dx = touches[0].clientX - touches[1].clientX;
+            const dy = touches[0].clientY - touches[1].clientY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (this.distanceStart) {
+              const factor = this.distanceStart / distance;
+              if (factor > 1) {
+                this.dollyOut();
+              } else if (factor < 1) {
+                this.dollyIn();
+              }
+              this.distanceStart = distance;
+            }
+          }
+        }
+        
+        onTouchEnd(event) {
+          this.isPointerDown = false;
+          this.distanceStart = null;
+        }
+        
+        rotateLeft(angle) {
+          this.sphericalDelta.theta -= angle;
+        }
+        
+        rotateUp(angle) {
+          this.sphericalDelta.phi -= angle;
+        }
+        
+        dollyIn() {
+          this.scale /= Math.pow(0.95, this.zoomSpeed);
+        }
+        
+        dollyOut() {
+          this.scale *= Math.pow(0.95, this.zoomSpeed);
+        }
+        
+        update() {
+          const offset = new THREE.Vector3();
+          const quat = new THREE.Quaternion().setFromUnitVectors(
+            this.camera.up, 
+            new THREE.Vector3(0, 1, 0)
+          );
+          const quatInverse = quat.clone().invert();
+          
+          const lastPosition = new THREE.Vector3();
+          const lastQuaternion = new THREE.Quaternion();
+          
+          return () => {
+            const position = this.camera.position;
+            
+            offset.copy(position).sub(this.target);
+            offset.applyQuaternion(quat);
+            
+            this.spherical.setFromVector3(offset);
+            
+            if (this.enableDamping) {
+              this.spherical.theta += this.sphericalDelta.theta * this.dampingFactor;
+              this.spherical.phi += this.sphericalDelta.phi * this.dampingFactor;
+              
+              this.sphericalDelta.theta *= (1 - this.dampingFactor);
+              this.sphericalDelta.phi *= (1 - this.dampingFactor);
+            } else {
+              this.spherical.theta += this.sphericalDelta.theta;
+              this.spherical.phi += this.sphericalDelta.phi;
+              
+              this.sphericalDelta.set(0, 0, 0);
+            }
+            
+            // Apply zoom
+            this.spherical.radius *= this.scale;
+            this.spherical.radius = Math.max(1, Math.min(100, this.spherical.radius));
+            this.scale = 1;
+            
+            // Restrict phi to prevent flipping
+            this.spherical.phi = Math.max(0.1, Math.min(Math.PI - 0.1, this.spherical.phi));
+            
+            this.spherical.makeSafe();
+            
+            offset.setFromSpherical(this.spherical);
+            offset.applyQuaternion(quatInverse);
+            
+            position.copy(this.target).add(offset);
+            this.camera.lookAt(this.target);
+            
+            return lastPosition.distanceToSquared(this.camera.position) > 1e-6 ||
+                   8 * (1 - lastQuaternion.dot(this.camera.quaternion)) > 1e-6;
+          };
+        }
+        
+        dispose() {
+          this.domElement.removeEventListener('mousedown', this.onMouseDown);
+          this.domElement.removeEventListener('wheel', this.onMouseWheel);
+          this.domElement.removeEventListener('contextmenu', (e) => e.preventDefault());
+          this.domElement.removeEventListener('touchstart', this.onTouchStart);
+          this.domElement.removeEventListener('touchmove', this.onTouchMove);
+          this.domElement.removeEventListener('touchend', this.onTouchEnd);
+          document.removeEventListener('mousemove', this.onMouseMove);
+          document.removeEventListener('mouseup', this.onMouseUp);
+        }
       }
-      
-      container.addEventListener('mousemove', onMouseMove);
 
-      // Animation loop with smooth interpolation
+      // Initialize orbit controls
+      const controls = new OrbitControls(camera, renderer.domElement);
+      const updateControls = controls.update();
+
+      // Animation loop
       function animate() {
         requestAnimationFrame(animate);
         
         const time = Date.now() * 0.001;
         
-        // Smooth rotation based on mouse
-        cubeGroup.rotation.x += (targetRotationX - cubeGroup.rotation.x) * 0.05;
-        cubeGroup.rotation.y += (targetRotationY - cubeGroup.rotation.y) * 0.05;
+        // Update controls
+        updateControls();
         
-        // Add continuous rotation
-        cubeGroup.rotation.x += 0.005;
-        cubeGroup.rotation.y += 0.01;
+        // Add subtle continuous rotation
+        cubeGroup.rotation.x += 0.002;
+        cubeGroup.rotation.y += 0.003;
         
         // Floating animation
-        cubeGroup.position.y = Math.sin(time) * 0.2;
+        cubeGroup.position.y = Math.sin(time * 0.5) * 0.1;
         
         // Animate lighting
         pointLight.position.x = Math.sin(time * 2) * 3;
@@ -166,7 +379,7 @@
       
       // Cleanup function
       cleanup = () => {
-        container.removeEventListener('mousemove', onMouseMove);
+        controls.dispose();
         window.removeEventListener('resize', handleResize);
         
         if (container.contains(renderer.domElement)) {
@@ -211,6 +424,11 @@
     position: relative;
     border-radius: inherit;
     overflow: hidden;
+    cursor: grab;
+  }
+  
+  #three-container:active {
+    cursor: grabbing;
   }
   
   #three-container canvas {
@@ -218,6 +436,7 @@
     width: 100% !important;
     height: 100% !important;
     border-radius: inherit;
+    touch-action: none;
   }
   
   #three-container.loading {
@@ -227,5 +446,6 @@
     background: var(--glass-bg);
     color: var(--text-secondary);
     font-size: 16px;
+    cursor: default;
   }
 </style>
